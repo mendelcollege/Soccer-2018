@@ -1,0 +1,98 @@
+char direct; int dist;
+
+void HTEnhancedIRSeekerV2(const byte port, int &dir = balldir, int &strength = balldist)
+{
+    int cResp;
+    byte cmdBuf[] = {0x10, 0x43};
+    byte respBuf[];
+    bool fSuccess;
+    int i, iMax;
+    long dcSigSum, dcStr;
+
+    dir = 0;
+    strength = 0;
+
+    // Read DC mode
+    cResp=6;
+    fSuccess = I2CBytes(port, cmdBuf, cResp, respBuf);
+    if (fSuccess)
+    {
+        // Find the max DC sig strength
+        iMax = 0;
+        for (i=1; i<5; i++) if (respBuf[i] > respBuf[iMax]) iMax = i;
+        // Calc base DC direction value
+        dir = iMax*2+1;
+        // Set base dcStrength based on max signal and average
+        dcSigSum = respBuf[iMax] + respBuf[5];
+        // Check signal strength of neighboring sensor elements
+        if ((iMax > 0) && (respBuf[iMax-1] > respBuf[iMax]/2))
+        {
+            dir--;
+            dcSigSum += respBuf[iMax-1];
+        }
+        if ((iMax < 4) && (respBuf[iMax+1] > respBuf[iMax]/2))
+        {
+            dir++;
+            dcSigSum += respBuf[iMax+1];
+        }
+        // Make DC strength compatible with AC strength.
+        //dcSigSum *= 500;
+        //dcStr = 1;
+        //repeat(10) dcStr = (dcSigSum/dcStr + dcStr) / 2;
+        dcStr = sqrt(dcSigSum * 500);
+        strength = dcStr;
+        // Decide if using DC strength
+        if (strength <= 200)
+        {
+            // Use AC Dir
+            dir = 0; strength = 0;
+            cmdBuf[1] = 0x49;
+            cResp=6;
+            fSuccess = I2CBytes(port, cmdBuf, cResp, respBuf);
+            if (fSuccess)
+            {
+                dir = respBuf[0];
+                // Sum the sensor elements to get strength
+                if (dir > 0) for (i=1; i<=5; i++) strength += respBuf[i];
+            }
+        }
+    }
+}
+
+task main()
+{
+    SetSensorLowspeed(S1);
+    int cResp = 6;
+    byte ACcmdbuf[] = {0x10, 0x49};
+    byte DCcmdbuf[] = {0x10, 0x42};
+    byte respBuf[6];
+    bool fSuccess;
+    int dir, dist;
+    while(true)
+    {
+        fSuccess = I2CBytes(S1, ACcmdbuf, cResp, respBuf);
+        if(fSuccess)
+        {
+            NumOut(0, LCD_LINE1, respBuf[0], DRAW_OPT_CLEAR_EOL);
+            NumOut(0, LCD_LINE2, respBuf[1], DRAW_OPT_CLEAR_EOL);
+            NumOut(0, LCD_LINE3, respBuf[2], DRAW_OPT_CLEAR_EOL);
+            NumOut(0, LCD_LINE4, respBuf[3], DRAW_OPT_CLEAR_EOL);
+            NumOut(0, LCD_LINE5, respBuf[4], DRAW_OPT_CLEAR_EOL);
+            NumOut(0, LCD_LINE6, respBuf[5], DRAW_OPT_CLEAR_EOL);
+        }
+        fSuccess = I2CBytes(S1, DCcmdbuf, cResp, respBuf);
+        if(fSuccess)
+        {
+            NumOut(50, LCD_LINE1, respBuf[0], DRAW_OPT_CLEAR_EOL);
+            NumOut(50, LCD_LINE2, respBuf[1], DRAW_OPT_CLEAR_EOL);
+            NumOut(50, LCD_LINE3, respBuf[2], DRAW_OPT_CLEAR_EOL);
+            NumOut(50, LCD_LINE4, respBuf[3], DRAW_OPT_CLEAR_EOL);
+            NumOut(50, LCD_LINE5, respBuf[4], DRAW_OPT_CLEAR_EOL);
+            NumOut(50, LCD_LINE6, respBuf[5], DRAW_OPT_CLEAR_EOL);
+        }
+        HTEnhancedIRSeekerV2(S1, dir, dist);
+        NumOut(0, LCD_LINE8, dir, DRAW_OPT_CLEAR_EOL);
+        NumOut(50, LCD_LINE8, dist, DRAW_OPT_CLEAR_EOL);
+        Wait(50);
+    }
+}

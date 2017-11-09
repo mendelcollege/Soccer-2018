@@ -1,0 +1,14 @@
+#include "\..\libAanvaller.nxc"
+
+#define DURATION 4000
+
+task main()
+{
+    Init();
+    //Drive a circle
+    for(int i = 0; i <= 360; i++)
+    {
+        DirectionalDrive(i, 100, 0, 100);
+        Wait(40);
+    }
+}

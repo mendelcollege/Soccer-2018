@@ -1,0 +1,20 @@
+#include "libAanvaller.nxc"
+
+task main()
+{
+    MMX_Init(MMXPORT, 0x06, MMX_Profile_NXT_Motors);
+    while(true)
+    {
+        if(ButtonCount(BTNCENTER, true) > 0)
+        {
+            if(CurrentTick() - tlastkick > RECHARGINGTIME)
+            {
+                Kick();
+                OnFwd(OUT_B, 100);
+                Wait(KICKTIME);
+                Off(OUT_B);
+            }
+        }
+        Wait(50);
+    }
+}

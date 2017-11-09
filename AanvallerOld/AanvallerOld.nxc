@@ -1,0 +1,108 @@
+#include "libAanvaller.nxc"
+
+#define everything 0
+#define fail false
+#define self
+#define destroy(x)
+
+void BoemBoemBatsiBa()
+{
+    unsigned long t0;
+    GoNowhere();
+    TextOut(0, LCD_LINE7, "Richten...", DRAW_OPT_CLEAR_EOL);
+    TurnToSlow(10, 0, 100);
+    BallCheckReturn(); //also updates IR
+    while(USVAL < 60)
+    {
+        GoRF(100);
+        BallCheckReturn();
+        if(LIGHTVAL > WHITE)
+        {
+            GoOpposite();
+            Wait(300);
+        }
+    }
+    while(USVAL > 120)
+    {
+        GoLF(100);
+        BallCheckReturn();
+        if(LIGHTVAL > WHITE)
+        {
+            GoOpposite();
+            Wait(300);
+        }
+    }
+    while(CurrentTick() - tlastkick < RECHARGINGTIME)
+    {
+        BallCheckReturn();
+    }
+    GoForward(100);
+    Wait(200);
+    Kick();
+    Wait(100);
+}
+
+task main()
+{
+    Init();
+    while(true)
+    {
+        UpdateIRValues();
+        DrawSensorValues();
+        if(BALLDIRUNKNOWN) dir = lastballstate;
+        TextOut(0, LCD_LINE7, "Zoeken...", DRAW_OPT_CLEAR_EOL);
+        
+        if(LIGHTVAL > WHITE)
+        {
+            GoOpposite();
+            Wait(300);
+        }
+        
+        if(BALLDIRSTRAIGHT)
+        {
+            if(dist > POSSESSIONTHRESHOLD)
+            {
+                Off(MOTORALL);
+                BoemBoemBatsiBa();
+            }
+            else if(dist > BALLREALCLOSE) GoForward(85);
+            else if(dist > BALLSEMICLOSE) GoForward(100);
+            else GoForward(100);
+        }
+        else if(dir > 5)
+        {
+            lastballstate = dir;
+            if(dist > POSSESSIONTHRESHOLD)
+            {
+                if(dir == 6) TurnRight(90);
+                else TurnRight(80);
+            }
+            else if(dist > BALLREALCLOSE)
+            {
+                if(dir == 6) GoRB(40);
+                else if(dir == 7) TurnRight(40);
+                else TurnRight(80);
+            }
+            else if(dir > 7) TurnRight(100);
+            else TurnRight(40);
+        }
+        else if(dir < 5)
+        {
+            lastballstate = dir;
+            if(dist > POSSESSIONTHRESHOLD)
+            {
+                if(dir == 4) TurnLeft(80);
+                else TurnLeft(80);
+            }
+            else if(dist > BALLREALCLOSE)
+            {
+                if(dir == 4) GoLB(40);
+                else if(dir == 7) TurnLeft(40);
+                else TurnLeft(80);
+            }
+            else if(dir < 3) TurnLeft(100);
+            else TurnLeft(40);
+        }
+        Yield();
+    }
+}

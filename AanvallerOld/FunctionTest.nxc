@@ -1,0 +1,44 @@
+#include "libAanvaller.h"
+#include "Scoring.h"
+
+task main()
+{
+    int i = 0;
+    Init();
+    while(true)
+    {
+        i = i + ButtonCount(BTNRIGHT, true) - ButtonCount(BTNLEFT, true);
+        NumOut(0, LCD_LINE1, i, DRAW_OPT_CLEAR_EOL);
+        switch(i)
+        {
+            case -1:
+                i = 2;
+                break;
+            case 0:
+                TextOut(6, LCD_LINE1, ": B.B.BatsiBa");
+                break;
+            case 1:
+                TextOut(6, LCD_LINE1, ": TheSequel");
+                break;
+            case 2:
+                TextOut(6, LCD_LINE1, ": BasicBitch");
+                break;
+            case 3:
+                i = 0;
+                break;
+        }
+        if(ButtonCount(BTNCENTER, true))
+        {
+            Wait(4000);
+            switch(i)
+            {
+                case 0: BoemBoemBatsiBa();
+                        break;
+                case 1: BoemBoemBatsiBaTheSequel();
+                        break;
+                case 2: BasicBitch();
+                        break;
+            }
+        }
+    }
+}

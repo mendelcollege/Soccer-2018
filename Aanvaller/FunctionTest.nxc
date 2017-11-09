@@ -1,0 +1,69 @@
+#include "libAanvaller.nxc"
+
+task main()
+{
+    char interface = 0, running = false;
+    Init();
+    while(true)
+    {
+        if(!running)
+        {
+            interface = interface + ButtonCount(BTNRIGHT, true) - ButtonCount(BTNLEFT, true);
+            NumOut(0, LCD_LINE1, interface, DRAW_OPT_CLEAR_EOL);
+            switch(interface)
+            {
+                case -1:
+                    interface = 3;
+                    break;
+                case 0:
+                    TextOut(6, LCD_LINE1, ": BorderControl");
+                    break;
+                case 1:
+                    TextOut(6, LCD_LINE1, ": Target");
+                    break;
+                case 2:
+                    TextOut(6, LCD_LINE1, ": Align");
+                    break;
+                case 3:
+                    TextOut(6, LCD_LINE1, ": Search");
+                    break;
+                case 4:
+                    TextOut(6, LCD_LINE1, ": Follow");
+                    break;
+                case 5:
+                    interface = 0;
+                    break;
+            }
+        }
+        if(running)
+        {
+            UpdateSensorValues();
+            switch(interface)
+            {
+                case 0:
+                    DirectionalDrive(45, 100, 0, 100);
+                    if(lightval > WHITEGREEN) MordorControl();
+                    break;
+                case 1:
+                    if(currentballstate == POSSESSION) Target();
+                    else Off(MOTOR_ALL);
+                    break;
+                case 2:
+                    Align();
+                    break;
+                case 3:
+                    Search();
+                    break;
+                case 4:
+                    Follow();
+                    break;
+            }
+        }
+        if(ButtonCount(BTNCENTER, true))
+        {
+            Off(MOTOR_ALL);
+            ClearScreen();
+            running = !running;
+        }
+    }
+}

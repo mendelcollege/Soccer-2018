@@ -1,0 +1,44 @@
+#ifndef __MOTORDRIVER_NXC__
+#define __MOTORDRIVER_NXC__
+
+#define MOTORDRIVERSETPWR     0x82
+#define MOTORDRIVERSETPWM     0x84
+#define MOTORDRIVERSETDIR     0xaa
+#define MOTORDRIVERSETA       0xa1
+#define MOTORDRIVERSETB       0xa5
+#define MOTORDRIVERNOTHING    0x01
+
+//Low Level
+void MotorDriverSetDirection(const byte &port, const byte &addr, const byte &dir)
+{
+    byte cmdbuf[];
+    ArrayBuild(cmdbuf, addr, MOTORDRIVERSETDIR, dir, NOTHING);
+    while(I2CCheckStatus(port));
+    I2CWrite(port, 0, cmdbuf);
+}
+
+void MotorDriverSetPower(const byte &port, const byte &addr, const byte &powera, const byte &powerb)
+{
+    byte cmdbuf[];
+    ArrayBuild(cmdbuf, addr, MOTORDRIVERSETSPEED, powera, powerb);
+    while(I2CCheckStatus(port));
+    I2CWrite(port, 0, cmdbuf);
+}
+
+void MotorDriverSetMotorA(const byte &port, const byte &addr, const byte &arg1, const byte &arg2)
+{
+    byte cmdbuf[];
+    ArrayBuild(cmdbuf, addr, MOTORDRIVERSETA, arg1, arg2);
+    while(I2CCheckStatus(port));
+    I2CWrite(port, 0, cmdbuf);
+}
+
+void MotorDriverSetMotorB(const byte &port, const byte &addr, const byte &arg1, const byte &arg2)
+{
+    byte cmdbuf[];
+    ArrayBuild(cmdbuf, addr, MOTORDRIVERSETB, arg1, arg2);
+    while(I2CCheckStatus(port));
+    I2CWrite(port, 0, cmdbuf);
+}
+
+#endif

@@ -1,0 +1,10 @@
+#include "\..\libAanvaller.nxc"
+
+#define DURATION 8000
+
+task main()
+{
+    Init();
+    LinearDrive(100, 100, 0);
+    Wait(DURATION);
+}

@@ -1,0 +1,11 @@
+#include "\Drivers\HTCompass.nxc"
+#include "libAanvaller.nxc"
+
+task main()
+{
+    OnFwd(OUT_ABC, 20); //Calib: Lowest possible speed
+    Wait(1000); //Calib: Time for stable rotation
+    HTCompassSetMode(COMPASSPORT, HTCOMPASSCALIBRATE);
+    Wait(15000); //Calib: Time turn between 1.5 and 2 times (ideally 20 sec)
+    HTCompassSetMode(COMPASSPORT, HTCOMPASSMEASURE);
+}

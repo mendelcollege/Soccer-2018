@@ -1,0 +1,28 @@
+#include "libAanvaller.nxc"
+
+#define DURATION 4000
+
+task main()
+{
+    unsigned long t0;
+    Init();
+    LinearDrive(100, 0, 0);
+    Wait(DURATION);
+    LinearDrive(0, 100, 0);
+    Wait(DURATION);
+    LinearDrive(0, 0, 100);
+    Wait(DURATION);
+    t0 = CurrentTick();
+    //Do everything at once super awesome combi stuff
+    while(CurrentTick() - t0 < DURATION)
+    {
+        UpdateSensorValues();
+        CompassDrive(45, 75, 10, 100);
+    }
+    //Drive a circle
+    for(int i = 0; i <= 360; i++)
+    {
+        DirectionalDrive(i, 100, 0, 100);
+        Wait(50);
+    }
+}

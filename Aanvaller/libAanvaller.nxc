@@ -1,31 +1,41 @@
 #ifndef __LIB_AANVALLER_NXC__
 #define __LIB_AANVALLER_NXC__
 
-#define DISPLAYSENSOR
+#define DISPLAYSENSORVALS //Zie UpdateSensorValues()
 
-#include "\Drivers\NXTMMX.NXC"
+#include "\Drivers\NXTMMX.nxc" //Mindsensors NXT Motor Multiplexor Driver
 
-//General
-#define aproxequal(n1, n2, maxdif) (abs(n1-n2) < maxdif)
 
-//Port aliases
+
+#################
+# Port Aliasses #
+#################
+
 #define IRSEEKERPORT S1
 #define COMPASSPORT S2
 #define LIGHTSENSORPORT S3
 #define USSENSORPORT S4
 #define MMXPORT S4
-
-//Motorstuffs (to-do)
-#define MOTORLEFT OUT_A     //snelheid van 50 komt overeen met ~1    rotation/sec
-#define MOTORBACK OUT_B     //snelheid van 50 komt overeen met ~1.5  rotation/sec
-#define MOTORRIGHT OUT_C    //snelheid van 50 komt overeen met ~1.35 rotation/sec
+#define MOTORLEFT OUT_A
+#define MOTORBACK OUT_B
+#define MOTORRIGHT OUT_C
 #define MOTORALL OUT_ABC
 
-//Kicker
-#define RECHARGINGTIME 4000 //Calib
-#define KICKTIME 30 //Calib
-unsigned long tlastkick = 0;
 
+
+################
+# KICKERSTUFFS #
+################
+
+#define RECHARGINGTIME 4000 //Minimale tijd tussen kicks zodat kicker kan opladen
+#define KICKTIME 30 //Tijd dat relais ingeschakeld is
+
+unsigned long tlastkick = 0; //Tijd dat er voor het laatst gekickt is
+
+/* Kick():
+ * Zet M2 van de controller voor een korte tijd op 100% power,
+ * zodat er 9V op de relais staat, en de stroomkring van de kicker sluit
+ */
 void Kick()
 {
     MMX_Run_Unlimited(MMXPORT, 0x06, MMX_Motor_2, MMX_Direction_Forward, 100);
@@ -34,27 +44,19 @@ void Kick()
     tlastkick = CurrentTick();
 }
 
-//SensorStorage
-byte lightval;
-byte usval;
-int orient;
-int balldist, lastballdist = 0;
-char balldir, lastballdir = 1;
-byte currentballstate;
-unsigned long tlastseen, losttime, tlastinfront, infronttime;
 
-//Light Calib
-#define WHITE 20 //Calib
-#define GREEN 5 //Calib
-#define WHITEGREEN 15 //Calib
 
-//IRBall
-#define POSSESSTHRES 240 //USsensor //Calib
-#define LOSSTHRES 200 //Calib
-#define FARCLOSE 50 //Calib
+######################
+# SENSORDATA STORAGE #
+######################
 
-//USsensor
-#define USTHRASH 7
+byte lightval, usval; //Waarde licht- en afstandssensor
+int orient; //Orientatie, genormaliseerd aantal graden dat de robot met de klok mee is gedraaid vanaf het starten van het programma
+int balldist, lastballdist = 0; //Sterkte van IR signaal
+char balldir, lastballdir = 1; //Richting van IR signaalm, van -4 tot 4
+byte currentballstate; //De huidige status van de bal, zie enum ballstate
+unsigned long tlastseen, losttime, tlastinfront, infronttime; //Tijdstip en tijdsduur dat de bal wel/niet gezien is / voor de robot is
+unsigned long tfar, tclose;
 
 enum ballstate
 {
@@ -64,8 +66,36 @@ enum ballstate
     POSSESSION
 };
 
-unsigned long tfar, tclose;
 
+
+######################
+# SENSOR CALIBRATION #
+######################
+
+//Lightsensor calibrative values
+#define WHITE 20
+#define GREEN 5
+#define WHITEGREEN 10
+
+//IRSeeker calibrative values
+#define POSSESSTHRES 240
+#define LOSSTHRES 200
+#define FARCLOSE 60
+#define FRONTFARCLOSE 120
+
+//USsensor calibrative values
+#define USTHRASH 7 //Ultrasone waarde waaronder de bal in het bezit is
+
+
+
+############
+# IRSEEKER #
+############
+
+/* HTEnhancedIRSeekerV2():
+ * Leest de IRSeeker, combineert DC en AC informatie,
+ * en stopt de informatie in gegeven variabelen (als standaard balldir + balldist)
+ */
 void HTEnhancedIRSeekerV2(const byte port, int &dir = balldir, int &strength = balldist)
 {
     int cResp;
@@ -125,9 +155,17 @@ void HTEnhancedIRSeekerV2(const byte port, int &dir = balldir, int &strength = b
     }
 }
 
-//Compass
-int compassbeginval;
 
+
+###########
+# COMPASS #
+###########
+
+int compassbeginval; //Waarde van kompas aan het begin om berekeningen te doen
+
+/* RelCompassVal():
+ * Berekent de genormaliseerde kompaswaarde relatief tot start van programma
+ */
 safecall int RelCompassVal()
 {
     int relval = SensorHTCompass(COMPASSPORT) - compassbeginval;
@@ -136,9 +174,22 @@ safecall int RelCompassVal()
     return relval;
 }
 
-//Drive Stuff /*to-do*/
 
-enum drivetype
+
+################
+# DRIVE STUFFS #
+################
+
+/* All driving functions assume:
+ *      - positive = counter-clockwise rotation of wheel
+ *      - three motors with 60 degrees inbetween
+ *      - all motors are placed the same distance off their center
+ * Note that 1 bitshift to the right (... >> 1) is equivalent to dividing by 2, but faster
+ * Also know what the (... ? ... : ...) operator does (conditional expression)
+ */
+
+
+enum drivetype //Verschillende soorten van motoraansturing
 {
     PROPORTIONAL,
     LINEAR,
@@ -147,41 +198,46 @@ enum drivetype
     COMPASS
 };
 
-struct drivestate
+struct drivestate //Structure om rijden mee te beschrijven
 {
     char x;             //positief = rechts
     char y;             //positief = vooruit
     char rot;           //positief = met de klok mee
     byte pwr;
-    int dir;
-    char dirvel;
-    byte type;
+    int dir;            //positief = heeft een snelheid naar rechts (behalve 0, 180)
+    char dirvel;        //snelheid in die richting
+    byte type;          //manier van aansturing, zie enum drivetype
 };
 
-drivestate currentdrivestate;
+drivestate currentdrivestate; //Variabele met informatie over hoe de robot op dit moment rijdt
 
-
-/*
- * ProportionalDrive: Give proportions in -100 to 100, and power.
- * For best accurracy use even numbers
- * If arguments are beyond limits expect undefined behaviour.
- * These flaws are left in for the sake of speed.
- * This is the semi optimised version
+/* ProportionalDrive(speedx, speedy, speedrot, pwr):
+ * All paramters are -100 - 100.
+ * Speedx, speedy speedrot are the rightward, forward and rotational speeds,
+ * as a percentage relative to their maximum speeds, but in proportion (xmax = ymax in real world)
+ * All proportions are kept intact.
+ *
+ * For best accurracy use even numbers.
+ * If parameters are beyond limits expect undefined behaviour.
+ * This flaw are left in for the sake of speed.
+ * It also updates currentdrivestate
  */
- 
 void ProportionalDrive(const char x, const char y, const char rot, const byte pwr = 100)
 {
     int r,l,b; //right, left, back
     int max;
-    r = (x >> 1) - (y * 111 >> 7) + rot;
+    //Calculate
+    r = (x >> 1) - (y * 111 >> 7) + rot; //(... * 111 >> 7) = (sqrt(...)/2) (faster approximation)
     l = (x >> 1) + (y * 111 >> 7) + rot;
     b = -x + rot;
+    //Normalize
     max = ( (abs(r) > abs(l)) ? abs(r) : abs(l));
     max = ((max > abs(b)) ? max : abs(b));
     r = r * pwr / max;
     l = l * pwr / max;
     b = b * pwr / max;
-    OnRev(MOTORRIGHT, r); //Should all be corresponding to polarity in which wheels turn left (robot turns right)
+    //Execute
+    OnRev(MOTORRIGHT, r); 
     OnRev(MOTORLEFT, l);
     OnRev(MOTORBACK, b);
     currentdrivestate.x = x;
@@ -191,6 +247,13 @@ void ProportionalDrive(const char x, const char y, const char rot, const byte pw
     currentdrivestate.type = PROPORTIONAL;
 }
 
+/* LinearDrive(speedx, speedy, speedrot):
+ * All paramters are -100 - 100.
+ * Speedx, speedy speedrot are the rightward, forward and rotational speeds,
+ * as a percentage relative to their maximum speeds.
+ * The linear speeds however, will "push away" the rotational speed.
+ * Note that the maximum speed of x and y have different real-world speeds (I think y is faster)
+ */
 void LinearDrive(const char x, const char y, char rot)
 {
     int r,l,b,max,min;
@@ -198,24 +261,29 @@ void LinearDrive(const char x, const char y, char rot)
     l = (x >> 1) + y;
     b = -x;
     max = ((abs(r) > abs(l)) ? abs(r) : abs(l));
-    if(max > 100)
+    if(max > 100) //If max power > 100, we can normalize and forget rot
     {
         r = r * 100 / max;
         l = l * 100 / max;
         b = b * 100 / max;
     }
-    else
+    else //Adjust rot for left over power/speed to use
     {
+        //Calculate max
         max = ((r > l) ? r : l);
         max = ((max > b) ? max : b);
+        //Calculate min
         min = ((r < l) ? r : l);
         min = ((min < b) ? min : b);
+        //Check if adding rot will make motor values more than 100, if not adjust
         if(rot + max > 100) rot = 100 - max;
         if(rot + min < -100) rot = -100 - min;
+        //Add rotation part to motor values
         r += rot;
         l += rot;
         b += rot;
     }
+    //Execute
     OnRev(MOTORRIGHT, r);
     OnRev(MOTORLEFT, l);
     OnRev(MOTORBACK, b);
@@ -225,28 +293,38 @@ void LinearDrive(const char x, const char y, char rot)
     currentdrivestate.type = LINEAR;
 }
 
+/* RotationalDrive(speedx, speedy, speedrot):
+ * All paramters are -100 - 100.
+ * Speedx, speedy speedrot are the rightward, forward and rotational speeds,
+ * as a percentage relative to their maximum speeds
+ * The rotational speed however, will "push away" linear speeds
+ * Note that the maximum speed of x and y have different real-world speeds (I think y is faster)
+ */
 void RotationalDrive(const char x, const char y, const char rot)
 {
     int r,l,b,max,min;
+    //Calculate motor values for driving
     r = (x >> 1) - y;
     l = (x >> 1) + y;
     b = -x;
+    //Calculate max motor value
     max = ((r > l) ? r : l);
     max = ((max > b) ? max : b);
     min = ((r < l) ? r : l);
     min = ((min < b) ? min : b);
+    //If adding rotational speed will make any motor value > 100)
     if(max + rot > 100 || min + rot < -100)
     {
-        r = r * (100 * sign(rot) - rot) / 100 + rot;
-        l = l * (100 * sign(rot) - rot) / 100 + rot;
-        b = b * (100 * sign(rot) - rot) / 100 + rot;
+        //Scale drivespeed
+        r = r * (100 - abs(rot)) / 100;
+        l = l * (100 - abs(rot)) / 100;
+        b = b * (100 - abs(rot)) / 100;
     }
-    else
-    {
-        r += rot;
-        l += rot;
-        b += rot;
-    }
+    //Add rotational speed
+    r += rot;
+    l += rot;
+    b += rot;
+    //Execute
     OnRev(MOTORRIGHT, r);
     OnRev(MOTORLEFT, l);
     OnRev(MOTORBACK, b);
@@ -256,28 +334,50 @@ void RotationalDrive(const char x, const char y, const char rot)
     currentdrivestate.type = ROTATIONAL;
 }
 
+/* DirectionalDrive(direction, directional velocity, rotational velocity, power):
+ * Drives in a certain direction given in degrees clockwise of driving forward (-180 - 180).
+ * Use directional and rotational velocity to specify proportion of power of driving an rotating.
+ * Specify optionally specify maximum power
+ * (It uses proportionaldrive)
+ */
 void DirectionalDrive(int dir, const char dirvel, const char rotvel, const byte pwr = 100)
 {
     int x, y;
+    //Calculate
     x = (sind(dir) * dirvel);
     y = (cosd(dir) * dirvel);
+    //Excetiute
     ProportionalDrive(x, y, rotvel, pwr);
+    //Overwrites some things done in ProportionalDrive
     currentdrivestate.dir = dir;
     currentdrivestate.type = DIRECTIONAL;
 }
 
+/* Compass(direction, directional velocity, rotational velocity, power):
+ * Same as directionaldrive, but now not relative to the robot but to the field / orientation at start
+ * Uses directionaldrive but compensates for any orientation offset.
+ * You can do cool stuff with this!!! (Like turning while keeping the same direction)
+ */
 void CompassDrive(int reldir, const char dirvel, const char rotvel, const byte pwr = 100)
 {
     int x, y;
+    //Calculate and normalize
     reldir -= orient;
     while(reldir <= -180) reldir += 360;
     while(reldir >   180) reldir -= 360;
+    //Execute
     DirectionalDrive(reldir, dirvel, rotvel, pwr);
+    //Overwrites some things done in DirectionalDrive
     currentdrivestate.dir = reldir;
     currentdrivestate.type = COMPASS;
 }
 
-//Field dimensions (in cm)
+
+
+####################
+# FIELD DIMENSIONS #
+####################
+
 #define STADIUMWIDTH 182
 #define STADIUMLENGTH 244
 
@@ -288,7 +388,15 @@ void CompassDrive(int reldir, const char dirvel, const char rotvel, const byte p
 #define GOALWALLDIST 61
 #define GOALDEPTH 10
 
-//Display
+
+
+#################################
+# THINGS TO DO WITH SENSOR DATA #
+#################################
+
+/* DrawSensorLabels():
+ * Draws labels on the screen for the sensor data displaying.
+ */
 void DrawSensorLabels()
 {
     TextOut(0,  LCD_LINE1, "IRdir:");
@@ -298,41 +406,56 @@ void DrawSensorLabels()
     TextOut(0,  LCD_LINE5, "Dist:");
 }
 
+/* UpdateSensorValues():
+ * Reads out the sensors, analyzes data, and stores ballstate and timestamps.
+ */
 void UpdateSensorValues()
 {
+    //Read sensor values
     HTEnhancedIRSeekerV2(IRSEEKERPORT, balldir, balldist);
     orient = RelCompassVal();
     lightval = Sensor(S3); //The proper way
     usval = SensorUS(USSENSORPORT);
-    
+
     //Fck big data analysis. Small data analysis FTW!
-    if(balldist == 0)
+    if(balldist == 0) //If ball is not detected
     {
-        losttime = CurrentTick() - tlastseen;
-        if(losttime > 200) currentballstate = LOST; //Calib
+        losttime = CurrentTick() - tlastseen; //Calculate the time the ball is lost
+        if(losttime > 100) currentballstate = LOST; //Ball is lost if not seen for 0,1 sec (calibrate)
+        //Use last useful data
         balldir = lastballdir;
         balldist = lastballdist;
     }
-    else
+    else //If ball is detected
     {
+        //Back up data, update time last seen
         tlastseen = CurrentTick();
         lastballdir = balldir;
         lastballdist = balldist;
-        if(usval <= USTHRASH && balldir == 5) currentballstate = POSSESSION;
+
+        //If distance to ball is less than thresthold, and ball direction is in front
+        if(usval < USTHRASH && balldir == 5) currentballstate = POSSESSION;
         else
         {
-            if(balldist > FARCLOSE)
-            {
-                currentballstate = CLOSE;
-                tclose = CurrentTick();
-            }
-            else
-            {
-                currentballstate = FAR;
-                tfar = CurrentTick();
-            }
+                //Else check if close or not, update timestamps
+                if(balldist > FARCLOSE && balldir < 4 && balldir > 6)
+                {
+                    currentballstate = CLOSE;
+                    tclose = CurrentTick();
+                }
+                if(balldist > FRONTFARCLOSE && balldir >= 4 && balldir <= 6)
+                {
+                    currentballstate = CLOSE;
+                    tclose = CurrentTick();
+                }
+                else
+                {
+                    currentballstate = FAR;
+                    tfar = CurrentTick();
+                }
         }
-        /*
+        //Old system with no US sensor
+        /* 
         if(balldir == 5 && balldist > POSSESSTHRES) ballstate = POSSESSION;
         else if((balldist > LOSSTHRES && ballstate != POSSESSION) || balldist <= LOSSTHRES)
         {
@@ -341,26 +464,26 @@ void UpdateSensorValues()
         }
         */
     }
-    balldir -= 5;
-    balldir = -balldir; //Optional flip so that rightward values are positive
-    if(abs(balldir) <= 1)
+    balldir -= 5; //Subtract 5, so that 0 is middle
+    balldir = -balldir; //Flip so that rightward values are positive
+    if(abs(balldir) <= 1) //If ball in front calculate
     {
-        if(!tlastinfront) tlastinfront = CurrentTick();
-        infronttime = CurrentTick() - tlastinfront;
+        if(!tlastinfront) tlastinfront = CurrentTick(); //Set timestamp if not 0
+        infronttime = CurrentTick() - tlastinfront; //Calculate time in front
     }
-    else
+    else //Reset timestamps and time in front
     {
         tlastinfront = 0;
         infronttime = 0;
     }
-    
+
+    #ifdef DISPLAYSENSORVALS
     NumOut(50,  LCD_LINE1, balldir, DRAW_OPT_CLEAR_EOL);
     NumOut(50,  LCD_LINE2, balldist, DRAW_OPT_CLEAR_EOL);
     NumOut(50,  LCD_LINE3, orient, DRAW_OPT_CLEAR_EOL);
     NumOut(50,  LCD_LINE4, lightval, DRAW_OPT_CLEAR_EOL);
     NumOut(50,  LCD_LINE5, usval, DRAW_OPT_CLEAR_EOL);
-    
-    switch(currentballstate)
+    switch(currentballstate) //Display ball state
     {
         case POSSESSION:
             TextOut(0, LCD_LINE7, "POSSESSION", DRAW_OPT_CLEAR_EOL);
@@ -375,18 +498,31 @@ void UpdateSensorValues()
             TextOut(0, LCD_LINE7, "LOST", DRAW_OPT_CLEAR_EOL);
             break;
     }
+    #endif
 }
 
-//Initialisation
+
+
+###################################
+# INITIALISATION OF ALL THE STUFF #
+###################################
+
+/* Init():
+ * Sets up sensors, and does other initialization stuff
+ */
 void Init()
 {
     SetSensorLowspeed(IRSEEKERPORT);
     SetSensorLowspeed(COMPASSPORT);
     SetSensorType(LIGHTSENSORPORT, SENSOR_TYPE_LIGHT);
     SetSensorMode(LIGHTSENSORPORT, SENSOR_MODE_PERCENT);
-    MMX_Init(MMXPORT, 0x06, MMX_Profile_NXT_Motors);
+    MMX_Init(MMXPORT, 0x06, MMX_Profile_NXT_Motors); //Calls SetSensorLowspeed
+    //Store starting orientation, which should equal robot pointing straight forward
+    //Lots of other things use this
     compassbeginval = SensorHTCompass(COMPASSPORT);
+    #ifdef DISPLAYSENSORVALS
     DrawSensorLabels();
+    #endif
 }
 
 #endif

@@ -1,22 +1,10 @@
 #include "libAanvaller.nxc"
 
-#define FUNCTIONTEST
-
+//Simple version of MorderControl()
+/*
 void MordorControl()
 {
-    static drivestate lastdrivestate;
-    static unsigned long tlastdrivestate;
-    if(tlastdrivestate == 0)
-    {
-        lastdrivestate = currentdrivestate; //I think this works.. Thx NXC for auto struct assignment!
-        tlastdrivestate = CurrentTick();
-    }
-    else if(CurrentTick() - tlastdrivestate < 2000)     //Calib
-    {
-        tlastdrivestate = CurrentTick();
-    }
-    else tlastdrivestate = 0;
-    switch(lastdrivestate)          //Be careful, may be new
+    switch(currentdrivestate.type)          //Be careful, may be new
     {
         case PROPORTIONAL:
             ProportionalDrive(-currentdrivestate.x, -currentdrivestate.y, 0, 100);
@@ -34,125 +22,206 @@ void MordorControl()
             CompassDrive(currentdrivestate.dir + 180, currentdrivestate.dirvel, 0, 100);
             break;
     }
-    //Wait(300);  //Calib
+    Wait(2000);
+}
+*/
+
+/* MordorControl():
+ * Makes sure robot stays in line.
+ * It remembers recent linecrossings, so that if it gets pushed over the line,
+ * get stuck there due to it's own linecross prevention
+ */
+void MordorControl()
+{
+    static drivestate lastdrivestate; //Static inside function means value will be kept
+    static unsigned long tlastdrivestate = 0;
+    if(tlastdrivestate == 0) //If there is no stored drivestate
+    {
+        //Store current drivestate + timestamp
+        lastdrivestate = currentdrivestate; //I think this works.. Thx NXC for auto struct assignment!
+        tlastdrivestate = CurrentTick();
+    }
+    else if(CurrentTick() - tlastdrivestate < 2000) //If the stored drivestate is recent, same line is crossed again (Calib)
+    {
+        tlastdrivestate = CurrentTick(); //Update timestamp
+    }
+    else //Normal situation, old invalid state is stored
+    {
+        //Store current drivestate + timestamp
+        lastdrivestate = currentdrivestate; //I think this works.. Thx NXC for auto struct assignment!
+        tlastdrivestate = CurrentTick();
+    }
+    
+    //Drive the opposite way
+    switch(lastdrivestate) //In normal cases this equals switch(currentdrivestate)
+    {
+        case PROPORTIONAL:
+            ProportionalDrive(-currentdrivestate.x, -currentdrivestate.y, 0, 100);
+            break;
+        case LINEAR:
+            LinearDrive(-currentdrivestate.x, -currentdrivestate.y, 0);
+            break;
+        case ROTATIONAL:
+            RotationalDrive(-currentdrivestate.x, -currentdrivestate.y, 0);
+            break;
+        case DIRECTIONAL:
+            ProportionalDrive(-currentdrivestate.x, -currentdrivestate.y, 0, 100);
+            break;
+        case COMPASS:
+            CompassDrive(currentdrivestate.dir + 180, currentdrivestate.dirvel, 0, 100);
+            break;
+    }
+    //Wait till robot passed line + buffer (get the joke plz)
     while(lightval < WHITEGREEN) UpdateSensorValues();
     while(lightval > WHITEGREEN) UpdateSensorValues();
-    Wait(50);   //(H2PO4)-/(HPO4)2- //Calib
-    
+    Wait(100);   //(H2PO4)-/(HPO4)2- //Calib
 }
 
+/* Search():
+ * Try to locate the ball.
+ * Idea for improvement: go backwards while turning around, using CompassDrive
+ */
 void Search()
 {
     RotationalDrive(0, 0, 40 * sign(balldir)); //Calib
 }
 
+/* Follow():
+ * Follow the ball (turn and go to the ball)
+ *
+ */
 void Follow()
 {
-    if(balldir == 0) LinearDrive(0, 100, 0);
-    switch(abs(balldir))
+    if(balldir == 0) LinearDrive(0, 100, 0); //If ball is in front go forward
+    else if(currentballstate == FAR)
     {
-        case 1:
-            LinearDrive(0, 100, -10 * sign(balldir));  //Calib
-            break;
-        case 2:
-            LinearDrive(100 * sign(balldir), 0, 40 * sign(balldir));  //Calib
-            //DirectionalDrive(45 * sign(dir), 100, 20 * sign(dir)); //In geval van goede sensor //Calib
-            break;
-        case 3:
-            DirectionalDrive(0, 0, -100 * sign(balldir));  //Calib (goed rondje)
-            
-            break;
-        case 4:
-            DirectionalDrive(0, 0, -100 * sign(balldir));  //Calib (goed rondje)
-            break;
+        switch(abs(balldir))
+        {
+            case 1:
+                LinearDrive(0, 100, 10 * sign(balldir));  //Calib
+                break;
+            case 2:
+                LinearDrive(100 * sign(balldir), 0, 40 * sign(balldir));  //Calib
+                //DirectionalDrive(45 * sign(dir), 100, 20 * sign(dir)); //In geval van goede sensor //Calib
+                break;
+            case 3:
+                DirectionalDrive(0, 0, 100 * sign(balldir));  //Calib (goed rondje)
+
+                break;
+            case 4:
+                DirectionalDrive(0, 0, 100 * sign(balldir));  //Calib (goed rondje)
+                break;
+        }
+    }
+    else
+    {
+        if(balldir == 0) LinearDrive(0, 50, 0);
+        switch(abs(balldir))
+        {
+            case 1:
+                LinearDrive(10 * sign(balldir), 75, 20 * sign(balldir));  //Calib
+                break;
+            case 2:
+                LinearDrive(75 * sign(balldir), 0, 40 * sign(balldir));  //Calib
+                //DirectionalDrive(45 * sign(dir), 100, 20 * sign(dir)); //In geval van goede sensor //Calib
+                break;
+            case 3:
+                DirectionalDrive(0, 0, 50 * sign(balldir), 100);  //Calib (goed rondje)
+
+                break;
+            case 4:
+                DirectionalDrive(0, 0, 50 * sign(balldir), 100);  //Calib (goed rondje)
+                break;
+        }
     }
 }
 
+/* Align():
+ * Get behind the ball, while turning forward (towards the goal)
+ */
 void Align()
 {
     int corrspeed = -orient / 2;
     if(corrspeed > 30) corrspeed = 30;
     if(corrspeed < -30) corrspeed = -30;
-    switch(balldir)
+    switch(abs(balldir))
     {
-        case -4:
-            DirectionalDrive(-90 * sign(balldir),  100, corrspeed, 50);
+        case 4:
+            DirectionalDrive(-90 * sign(balldir),  75, corrspeed, 100);
             break;
-        case -3:
-            DirectionalDrive(135 * sign(balldir), 100, corrspeed, 50);
+        case 3:
+            DirectionalDrive(-150 * sign(balldir), 100, corrspeed, 100);
             break;
-        case -2:
-            DirectionalDrive(90 * sign(balldir), 100, corrspeed, 50);
+        case 2:
+            DirectionalDrive(150 * sign(balldir), 75, corrspeed, 100);
             break;
-        case -1:
-            DirectionalDrive(45 * sign(balldir), 100, corrspeed, 50);
+        case 1:
+            DirectionalDrive(75 * sign(balldir), 100, corrspeed, 100);
             break;
         case 0:
             DirectionalDrive(0, 100, corrspeed, 100);
             break;
     }
+
 }
 
+/* Target():
+ * (used when in possession);
+ */
 void Target()       //Vrot = Vx/r (Vrot is rotating speed, Vx is snelheid x-richting, r is de straal van de cirkel die de robot maakt)
 {
-    int r;
-    int Vrot;
-    if(abs(orient) < 13)
+    int r = 11.6;
+    int Vrot = 50;
+    if(abs(orient) < 13) // If robot almost pointed forward (towards goal)
     {
+        //Drive forward a bit (but also turning a bit more to the goal) and kick
         if(orient < 0) LinearDrive(0, 100, -10);
         if(orient > 0) LinearDrive(0, 100,  10);
-        Wait(50); //Calib
-        if(CurrentTick() - tlastkick >= RECHARGINGTIME) Kick();
+        Wait(500); //Calib
+        if(CurrentTick() - tlastkick >= RECHARGINGTIME) Kick(); //Checks if kicker is charged
     }
-    else
+    else //Turn to goal by circling around the ball, so no possession is lost
     {
-        
-        Vrot = 50;           //Calib
-        r = 11.6;           //Calib
-        ProportionalDrive(80 * sign(orient), 4, -50 * sign(orient), 100);
+        ProportionalDrive(80 * sign(orient), 30, -40 * sign(orient), 100);
     }
 }
 
+/* DistCheck():
+ * Unused function made by soldeertim
+ * Think it was used to quickly find the ball, in the first seconds after the ball
+ * went from close to far. You can implement this using tclose, and tfar.
+ * Name makes no sense.
+ */
 void DistCheck()
 {
-    switch(balldir)
+    switch(abs(balldir))
     {
-        case -4:
-            RotationalDrive(0, 0, -100);   //Calib
-            break;
-        case -3:
-            RotationalDrive(0, 0, -80);
-            break;
-        case -2:
-            RotationalDrive(0, 0, -60);
-            break;
-        case -1:
-            RotationalDrive(0, 0, -30);
-            break;
         case 0:
-            currentballstate = FAR;
+            Follow();
             break;
         case 1:
-            RotationalDrive(0, 0, 30);
+            RotationalDrive(0, 0, 30 * sign(balldir));
             break;
         case 2:
-            RotationalDrive(0, 0, 60);
+            RotationalDrive(0, 0, 60 * sign(balldir));
             break;
         case 3:
-            RotationalDrive(0, 0, 80);
+            RotationalDrive(0, 0, 80 * sign(balldir));
             break;
         case 4:
-            RotationalDrive(0, 0, 100);
+            RotationalDrive(0, 0, 100 * sign(balldir));
             break;
     }
 }
-//#define CHECKLINE
 
-#ifndef FUNCTIONTEST
+#define CHECKLINE //Comment this out if you don't want it spacing out while testing on random surfaces
+#ifndef FUNCTIONTEST //Preprocessor wizardry so all function in file, except main can be included in functiontest
 
 task main()
 {
+    LinearDrive(0,100,0);
     Init();
+    Wait(200);
     while(true)
     {
         UpdateSensorValues();
@@ -164,103 +233,25 @@ task main()
         }
         else
         #endif
-        switch(currentballstate)
-        {
-            case POSSESSION:
-                TextOut(0, LCD_LINE8, "Target");
-                Target();
-                break;
-            case CLOSE:
-                TextOut(0, LCD_LINE8, "Align");
-                Align();
-                break;
-            case FAR:
-                if(tclose - tfar < 1000)
-                {
-                    TextOut(0, LCD_LINE8, "DistCheck");
-                    DistCheck();
-                }
-                else
-                {
-                    TextOut(0, LCD_LINE8, "Follow");
-                    Follow();
-                }
-                break;
-            case LOST:
-                TextOut(0, LCD_LINE8, "Search");
-                Search();
-                break;
-        }
-    }
-}
-
-#else
-
-task main()
-{
-    char interface = 0, running = false;
-    Init();
-    while(true)
-    {
-        if(!running)
-        {
-            interface = interface + ButtonCount(BTNRIGHT, true) - ButtonCount(BTNLEFT, true);
-            NumOut(0, LCD_LINE1, interface, DRAW_OPT_CLEAR_EOL);
-            switch(interface)
+            switch(currentballstate)
             {
-                case -1:
-                    interface = 3;
+                case POSSESSION:
+                    TextOut(0, LCD_LINE8, "Target");
+                    Target();
                     break;
-                case 0:
-                    TextOut(6, LCD_LINE1, ": BorderControl");
-                    break;
-                case 1:
-                    TextOut(6, LCD_LINE1, ": Target");
-                    break;
-                case 2:
-                    TextOut(6, LCD_LINE1, ": Align");
-                    break;
-                case 3:
-                    TextOut(6, LCD_LINE1, ": Search");
-                    break;
-                case 4:
-                    TextOut(6, LCD_LINE1, ": Follow");
-                    break;
-                case 5:
-                    interface = 0;
-                    break;
-            }
-        }
-        if(running)
-        {
-            UpdateSensorValues();
-            switch(interface)
-            {
-                case 0:
-                    DirectionalDrive(45, 100, 0, 100);
-                    if(lightval > WHITEGREEN) MordorControl();
-                    break;
-                case 1:
-                    if(currentballstate == POSSESSION) Target();
-                    else Off(OUT_ABC);
-                    break;
-                case 2:
+                case CLOSE:
+                    TextOut(0, LCD_LINE8, "Align");
                     Align();
                     break;
-                case 3:
-                    Search();
-                    break;
-                case 4:
+                case FAR:
+                    TextOut(0, LCD_LINE8, "Follow");
                     Follow();
                     break;
+                case LOST:
+                    TextOut(0, LCD_LINE8, "Search");
+                    Search();
+                    break;
             }
-        }
-        if(ButtonCount(BTNCENTER, true))
-        {
-            Off(OUT_ABC);
-            ClearScreen();
-            running = !running;
-        }
     }
 }
 

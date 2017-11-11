@@ -1,4 +1,6 @@
+#define FUNCTIONTEST
 #include "libAanvaller.nxc"
+#include "Aanvaller.nxc"
 
 task main()
 {
@@ -46,7 +48,7 @@ task main()
                     break;
                 case 1:
                     if(currentballstate == POSSESSION) Target();
-                    else Off(MOTOR_ALL);
+                    else Off(OUT_ABC);
                     break;
                 case 2:
                     Align();
@@ -61,9 +63,10 @@ task main()
         }
         if(ButtonCount(BTNCENTER, true))
         {
-            Off(MOTOR_ALL);
+            Off(OUT_ABC);
             ClearScreen();
             running = !running;
         }
     }
 }
+

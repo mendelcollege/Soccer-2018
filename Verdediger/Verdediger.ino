@@ -8,6 +8,7 @@
 
 //#define MOTORTEST
     //#define TESTDIRECTIONAL
+    #define DriveFunction RotationalDrive
 
 /*
 //Handydandy sign function
@@ -284,9 +285,6 @@ void loop()
                 break;
             case DEFLECT:
                 Deflect();
-                break;
-            default:
-                Guard();
                 break;
         }
     }
